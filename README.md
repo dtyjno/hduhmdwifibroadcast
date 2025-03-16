@@ -17,32 +17,42 @@ git clone -b stable https://github.com/svpcom/wfb-ng.git
 cd wfb-ng && make deb && sudo apt install ./deb_dist/wfb-ng*.deb
 
 问题：
-
+1. 
+```
+src/rtsp_server.c:20:10: fatal error: gst/gst.h: 没有那个文件或目录
+   20 | #include <gst/gst.h>
+      |          ^~~~~~~~~~~
+```
 sudo apt-get update
 <!-- sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev -->
 sudo apt-get install -y libgstrtspserver-1.0-dev
-
+2. 
+```
 /usr/bin/python3: ModuleNotFoundError: No module named ‘virtualenv’
+```
 <!-- pip install virtualenv -->
 <!-- python -m virtualenv --version -->
 
-# Ubuntu/Debian
 sudo apt-get install python3-virtualenv
 
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-make deb
+3. 
 
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 sudo apt install -y libpcap-dev libsodium-dev libevent-dev debhelper dh-python python3-all python3-pip python3-pyroute2 python3-future python3-twisted python3-msgpack python3-stdeb python3-all-dev python3-setuptools python3-jinja2 python3-serial virtualenv
 
+make deb
+
+
+
 编译，最重要的是编译过程需要下载大量的额github的内容因此需要翻墙
 
-
+开始配置：
 
 https://github.com/svpcom/wfb-ng/wiki/Setup-HOWTO
 https://github.com/svpcom/wfb-ng/wiki/Setup-HOWTO
 
-USB接线检查
+# USB接线检查
 高质量的USB连接至关重要！
  
 劣质/细/无屏蔽的USB线可能导致大量FEC错误和丢包！
@@ -69,9 +79,8 @@ Panasonic EEUFR1V102电容
 30x30mm散热片+风扇（必需，BL-M8812EU2无主动散热会快速烧毁）
  
 
-配置步骤
 
-# wsl 未实现
+<!--# wsl 未实现
 
 定制内核  https://learn.microsoft.com/zh-cn/windows/wsl/connect-usb#attach-a-usb-device
 
@@ -94,7 +103,8 @@ usbipd detach --busid <busid>
 lsusb  
 ip link show  # 检查接口名（如 wlan0）
 ```
-# Check USB wiring
+-->
+ Check USB wiring
 
 关键配件：
 ​电源：5V ≥5A 的独立电源（通过BEC供电，避免使用USB电源）
@@ -133,7 +143,7 @@ ifconfig #查看网卡
 
 以下命令重新启动 NetworkManager：
 ```
-$ sudo service NetworkManager restart
+sudo service NetworkManager restart
 ```
 ```
 
@@ -146,8 +156,8 @@ wlxbcec237f0e2e: flags=4099<UP,BROADCAST,MULTICAST>  mtu 4052
 ```
 
 iwconfig #可以查询当前网卡的模式
-```
 
+```
 wlxbcec237f0e2e  IEEE 802.11  ESSID:off/any  
           Mode:Managed  Access Point: Not-Associated   Tx-Power=18 dBm   
           Retry short limit:7   RTS thr:off   Fragment thr:off
@@ -162,7 +172,7 @@ echo "options 88XXau_wfb rtw_tx_pwr_idx_override=30" | sudo tee -a /etc/modprobe
 
 检查原厂 realtek 驱动程序（如果存在）是否已禁用！
 
-要禁用将其添加到黑名单：
+另一种添加命令：要禁用将其添加到黑名单：
 ```sh
 cat > /etc/modprobe.d/wfb.conf <<EOF
 # blacklist stock module
@@ -215,7 +225,7 @@ Add net.core.bpf_jit_enable = 1 to /etc/sysctl.conf. Reload sysctl.
 echo "net.core.bpf_jit_enable = 1" | sudo tee -a /etc/sysctl.conf  
 sudo sysctl -p  
 ```
-# 禁用NetworkManager管理接口  
+# 禁用NetworkManager管理接口  （不需要）
 echo -e "[keyfile]\nunmanaged-devices=interface-name:wlan0" | sudo tee -a /etc/NetworkManager/NetworkManager.conf  
 sudo systemctl restart NetworkManager  
 
@@ -258,9 +268,31 @@ peer = 'listen://0.0.0.0:5602'  # listen for video stream (gstreamer on drone)
 With this settings WFB-NG will listen on port 14550 on drone and connect to udp://127.0.0.1:14550 on GS.
 ```
 
-etc
+如果您想覆盖默认调制类型（MCS#1、长 GI、20MHz BW、STBC 1） 您可以为每个流执行此作。流设置是独立的。您可以对它们中的每一个使用不同的调制。 例如：
 
+```
+[drone_video]
+bandwidth = 20     # bandwidth 20 or 40 MHz
+short_gi = False   # use short GI or not
+stbc = 1           # stbc streams: 1, 2, 3 or 0 if unused
+mcs_index = 1      # mcs index
 
+[drone_mavlink]
+bandwidth = 20     # bandwidth 20 or 40 MHz
+short_gi = False   # use short GI or not
+stbc = 1           # stbc streams: 1, 2, 3 or 0 if unused
+mcs_index = 1      # mcs index
+
+[gs_mavlink]
+bandwidth = 20     # bandwidth 20 or 40 MHz
+short_gi = False   # use short GI or not
+stbc = 1           # stbc streams: 1, 2, 3 or 0 if unused
+mcs_index = 1      # mcs index
+```
+
+另一种配置样板：
+
+地面站：
 ```
 [common]  
 wifi_channel = 161    # 5.8GHz频段5825MHz（20MHz带宽）  
@@ -310,7 +342,7 @@ peer = 'listen://0.0.0.0:5602'  # listen for video stream (gstreamer on drone)
 EOF
 ```
 
-错误：
+如果出现错误：
 SIOCSIFFLAGS: Operation not possible due to RF-kill  
 
 then you need to disable RFKill:
@@ -324,7 +356,7 @@ Do `systemctl daemon-reload`,
 `systemctl start wifibroadcast@gs` on the GS and 
 `systemctl start wifibroadcast@drone` on the drone.
 
-# Disable wpa_supplicant and other daemons on WFB-NG wlan interface! Use ps uaxwwww | grep wlan to check.
+# Disable wpa_supplicant and other daemons on WFB-NG wlan interface! Use ps uaxwwww | grep wlan to check.（不需要）
 
 
 
@@ -358,7 +390,9 @@ to ignore WFB-NG interface.
 
 sudo systemctl start wifibroadcast@gs    # 启动地面站服务  
 sudo systemctl start wifibroadcast@drone # 启动无人机服务  
-`wfb-cli gs `                              # 监控链路状态  
+wfb-cli gs                               # 监控链路状态  
+
+sudo systemctl stop wifibroadcast@gs 
 
 journalctl -u wifibroadcast@gs # 查看日志
 
@@ -384,3 +418,45 @@ iw reg get                 # 验证射频区域设置
 dmesg | grep -i 8812au  # 无输出: ​驱动未加载
 txpower 18.00 dBm  # 当前功率
 ```
+
+
+https://blog.csdn.net/lida2003/article/details/144726793
+
+
+
+安装gst-launch-1.0
+步骤一：安装deb软件包
+$ sudo apt install -y gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+$ sudo apt install -y gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
+1
+2
+步骤二：启动树莓派视频流
+$ libcamera-vid --inline --width 960 --height 540 --bitrate 4000000 --framerate 30 --hflip --vflip --timeout 0 -o - | gst-launch-1.0 -v fdsrc ! h264parse ! rtph264pay config-interval=1 pt=35 ! udpsink sync=false host=127.0.0.1 port=5602
+1
+
+gst-launch-1.0 v4l2src device=/dev/video0 ! videoconvert ! x264enc ! rtph264pay ! udpsink host=127.0.0.1 port=5602
+
+
+
+ 视频流未到达地面站
+​检查端口监听状态：
+
+bash
+sudo netstat -tuln | grep 5602  # 确认无人机端 5602 端口处于监听状态
+​预期输出：
+bash
+udp   0   0 0.0.0.0:5602    0.0.0.0:*
+​验证 GStreamer 数据发送：
+
+bash
+# 在无人机端抓包验证
+sudo tcpdump -i lo -n udp port 5602  # 应显示持续 UDP 数据包
+​2. 防火墙或网络问题
+​开放 UDP 5602 端口：
+
+bash
+sudo ufw allow 5602/udp  # 若使用 ufw 防火墙
+
+# 发送测试视频图案（排除摄像头硬件问题）
+gst-launch-1.0 videotestsrc ! videoconvert ! x264enc ! rtph264pay ! udpsink host=127.0.0.1 port=5602
+
