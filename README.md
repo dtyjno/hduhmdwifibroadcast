@@ -71,7 +71,7 @@ Panasonic EEUFR1V102电容
 
 配置步骤
 
-# wsl
+# wsl 未实现
 
 定制内核  https://learn.microsoft.com/zh-cn/windows/wsl/connect-usb#attach-a-usb-device
 
