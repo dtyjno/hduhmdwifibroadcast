@@ -1,4 +1,10 @@
-https://blog.csdn.net/hoopertsau/article/details/126150575
+参考资料
+
+OpenHD改造实现廉价高清数字图传:https://blog.csdn.net/hoopertsau/article/details/126150575
+
+wfb-ng Setup HOWTO :https://github.com/svpcom/wfb-ng/wiki/Setup-HOWTO
+
+修补了 wfb-ng 的 rtl88xxau 驱动程序: https://github.com/svpcom/rtl8812au#
 
 wifibroadcast
 
@@ -184,6 +190,24 @@ EOF
 ```
  cat /etc/modprobe.d/wfb.conf
 ```
+# 生成密钥
+
+​问题：WFB-NG 启动时需要加密密钥 /etc/gs.key，但该文件不存在。
+​后果：视频流接收进程（wfb_rx）直接崩溃，导致整个服务退出。
+
+Generate encryption keys for ground station and drone: `wfb_keygen`. 
+```
+./wfb_keygen 
+Keypair generated from random seed
+Drone keypair (drone sec + gs pub) saved to drone.key
+GS keypair (gs sec + drone pub) saved to gs.key
+```
+You need to put `gs.key` to `/etc/gs.key` on the ground station and `drone.key `to `/etc/drone.key` on the drone. Mention that this script will regenerate key and delete old one. If you run it twice on GS, then you can lose your drone connectivity.
+```
+sudo mv gs.key /etc/gs.key
+sudo mv drone.key /etc/drone.key
+sudo chmod 600 /etc/gs.key /etc/drone.key  # 设置权限
+```
 
 # 启用BPF JIT加速  
 Add net.core.bpf_jit_enable = 1 to /etc/sysctl.conf. Reload sysctl.
@@ -309,7 +333,7 @@ Do `systemctl daemon-reload`,
         
   查看还有哪些后台服务用到了网卡（wlan1 替换成你的网卡名称）
 ```
-ps uaxwwww | grep wlan
+ps uaxwwww | grep wlan1
 ```
 
 Double check that card is in unmanaged state in nmcli output and ifconfig wlanXX doesn't show any address and card state is down.
@@ -337,3 +361,26 @@ sudo systemctl start wifibroadcast@drone # 启动无人机服务
 `wfb-cli gs `                              # 监控链路状态  
 
 journalctl -u wifibroadcast@gs # 查看日志
+
+
+
+​手动设置监控模式(可能需要)：
+```bash
+sudo ip link set wlxbcec237f0e2e down
+sudo iw dev wlxbcec237f0e2e set monitor otherbss
+sudo ip link set wlxbcec237f0e2e up
+```
+​检查网卡状态：
+```bash
+iw dev  # 确认接口已进入监控模式（Mode: Monitor）
+```
+
+```sh
+dmesg | grep -i error      # 查看内核错误
+lsmod | grep 88XXau        # 检查驱动加载
+iw reg get                 # 验证射频区域设置
+
+
+dmesg | grep -i 8812au  # 无输出: ​驱动未加载
+txpower 18.00 dBm  # 当前功率
+```
