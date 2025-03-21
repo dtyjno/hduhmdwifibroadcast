@@ -144,6 +144,38 @@ In any condition don't power up wifi card without antennas!
 https://github.com/svpcom/rtl8812au
 
 
+### raspberrypi
+```
+make
+make install
+```
+
+ 要编译就要有linux header，在/lib/modules/ 下面有对应版本的头文件，但是没有build目录 /lib/modules/5.10.17-v7+/build 无法编译
+        要先安装 sudo apt install raspberrypi-kernel-headers   
+        然后建立一个软连接到这里，ln -s /usr/src/linux-headers-5.10.63-v7+ /lib/modules/5.10.17-v7+/build
+        这样就能编译了。
+
+
+        准备好之后，就可以进行安装了，重点就以下两个语句。
+
+#编译，安装驱动
+sudo make dkms_install  
+ 
+#用来删除驱动
+sudo make dkms_remove 
+        问题：
+        sudo apt-get install raspberrypi-kernel-headers只能安装最新的版本，可能与当前的操作系统的版本不一致。
+        所以要手动下载deb包，https://archive.raspberrypi.org/debian/pool/main/r/raspberrypi-firmware/
+        到这个网站找一下版本号。
+        因为版本不太好找，所以要查一下对应的linux内核编译的时间，可以通过一下指令
+        strings /boot/start.elf | grep VC_BUILD_ID
+        然后找到对应的deb包，下载，sudo apt install ./XXXX.deb
+        注意，要先把之前的raspberrypi-kernel-headers最好卸载掉
+        安装时间比较长，主要是因为会把module下面的模块全部编译一遍。。。
+
+
+### 其他
+
 git clone https://github.com/svpcom/rtl8812au.git
 
 sudo apt-get install dkms
@@ -646,28 +678,3 @@ gst-launch-1.0 udpsrc port=5602 \
   ! autovideosink sync=false
 ```
 
-
-# raspberrypi
-
- 要编译就要有linux header，在/lib/modules/ 下面有对应版本的头文件，但是没有build目录 /lib/modules/5.10.17-v7+/build 无法编译
-        要先安装 sudo apt install raspberrypi-kernel-headers   
-        然后建立一个软连接到这里，ln -s /usr/src/linux-headers-5.10.63-v7+ /lib/modules/5.10.17-v7+/build
-        这样就能编译了。
-
-
-        准备好之后，就可以进行安装了，重点就以下两个语句。
-
-#编译，安装驱动
-sudo make dkms_install  
- 
-#用来删除驱动
-sudo make dkms_remove 
-        问题：
-        sudo apt-get install raspberrypi-kernel-headers只能安装最新的版本，可能与当前的操作系统的版本不一致。
-        所以要手动下载deb包，https://archive.raspberrypi.org/debian/pool/main/r/raspberrypi-firmware/
-        到这个网站找一下版本号。
-        因为版本不太好找，所以要查一下对应的linux内核编译的时间，可以通过一下指令
-        strings /boot/start.elf | grep VC_BUILD_ID
-        然后找到对应的deb包，下载，sudo apt install ./XXXX.deb
-        注意，要先把之前的raspberrypi-kernel-headers最好卸载掉
-        安装时间比较长，主要是因为会把module下面的模块全部编译一遍。。。
