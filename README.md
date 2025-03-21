@@ -11,10 +11,11 @@ wifibroadcast
 wifibroadcast
 
 https://docs.px4.io/main/en/companion_computer/video_streaming_wfb_ng_wifi.html
-
+```sh
 sudo apt install libpcap-dev libsodium-dev python3-all python3-twisted
 git clone -b stable https://github.com/svpcom/wfb-ng.git
 cd wfb-ng && make deb && sudo apt install ./deb_dist/wfb-ng*.deb
+```
 
 问题：
 1. 
@@ -23,26 +24,37 @@ src/rtsp_server.c:20:10: fatal error: gst/gst.h: 没有那个文件或目录
    20 | #include <gst/gst.h>
       |          ^~~~~~~~~~~
 ```
+解决
+```bash
 sudo apt-get update
+```
 <!-- sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev -->
+
 sudo apt-get install -y libgstrtspserver-1.0-dev
+
 2. 
 ```
 /usr/bin/python3: ModuleNotFoundError: No module named ‘virtualenv’
 ```
 <!-- pip install virtualenv -->
 <!-- python -m virtualenv --version -->
-
+解决
+```sh
 sudo apt-get install python3-virtualenv
-
+```
 3. 
-
+解决：
+```
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 sudo apt install -y libpcap-dev libsodium-dev libevent-dev debhelper dh-python python3-all python3-pip python3-pyroute2 python3-future python3-twisted python3-msgpack python3-stdeb python3-all-dev python3-setuptools python3-jinja2 python3-serial virtualenv
-
+```
+编译安装命令
+```sh
+cd wfb-ng
 make deb
-
+sudo apt install ./deb_dist/wfb-ng*.deb
+```
 
 
 编译，最重要的是编译过程需要下载大量的额github的内容因此需要翻墙
@@ -635,3 +647,27 @@ gst-launch-1.0 udpsrc port=5602 \
 ```
 
 
+# raspberrypi
+
+ 要编译就要有linux header，在/lib/modules/ 下面有对应版本的头文件，但是没有build目录 /lib/modules/5.10.17-v7+/build 无法编译
+        要先安装 sudo apt install raspberrypi-kernel-headers   
+        然后建立一个软连接到这里，ln -s /usr/src/linux-headers-5.10.63-v7+ /lib/modules/5.10.17-v7+/build
+        这样就能编译了。
+
+
+        准备好之后，就可以进行安装了，重点就以下两个语句。
+
+#编译，安装驱动
+sudo make dkms_install  
+ 
+#用来删除驱动
+sudo make dkms_remove 
+        问题：
+        sudo apt-get install raspberrypi-kernel-headers只能安装最新的版本，可能与当前的操作系统的版本不一致。
+        所以要手动下载deb包，https://archive.raspberrypi.org/debian/pool/main/r/raspberrypi-firmware/
+        到这个网站找一下版本号。
+        因为版本不太好找，所以要查一下对应的linux内核编译的时间，可以通过一下指令
+        strings /boot/start.elf | grep VC_BUILD_ID
+        然后找到对应的deb包，下载，sudo apt install ./XXXX.deb
+        注意，要先把之前的raspberrypi-kernel-headers最好卸载掉
+        安装时间比较长，主要是因为会把module下面的模块全部编译一遍。。。
