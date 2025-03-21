@@ -423,40 +423,209 @@ txpower 18.00 dBm  # 当前功率
 https://blog.csdn.net/lida2003/article/details/144726793
 
 
+# 视频输出
 
 安装gst-launch-1.0
 步骤一：安装deb软件包
-$ sudo apt install -y gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+```sh
+sudo apt install -y gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good
 $ sudo apt install -y gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
-1
-2
+```
+
 步骤二：启动树莓派视频流
-$ libcamera-vid --inline --width 960 --height 540 --bitrate 4000000 --framerate 30 --hflip --vflip --timeout 0 -o - | gst-launch-1.0 -v fdsrc ! h264parse ! rtph264pay config-interval=1 pt=35 ! udpsink sync=false host=127.0.0.1 port=5602
-1
-
+```
+libcamera-vid --inline --width 960 --height 540 --bitrate 4000000 --framerate 30 --hflip --vflip --timeout 0 -o - | gst-launch-1.0 -v fdsrc ! h264parse ! rtph264pay config-interval=1 pt=35 ! udpsink sync=false host=127.0.0.1 port=5602
+```
+```
 gst-launch-1.0 v4l2src device=/dev/video0 ! videoconvert ! x264enc ! rtph264pay ! udpsink host=127.0.0.1 port=5602
+```
 
 
+---
 
- 视频流未到达地面站
-​检查端口监听状态：
+
+发送端：摄像头采集 + H.264编码 + WiFiBroadcast发送
+bash
+```
+# 通过ffmpeg采集摄像头数据并实时编码为H.264，通过管道发送到WiFiBroadcast
+ffmpeg \
+  -f v4l2 -input_format yuyv422 -video_size 640x480 -framerate 30 -i /dev/video0 \
+  -vcodec libx264 -preset ultrafast -tune zerolatency -g 20 -bf 0 -f h264 \
+  - | sudo wfb_tx -u 5600 -k 1 -n 12 wlan0
+
+```
+```
+# 先启动WiFiBroadcast接收数据到本地UDP端口
+sudo wfb_rx -u 5600 wlan0 &
+
+# 再通过ffplay播放H.264流
+ffplay -fflags nobuffer -flags low_delay -framedrop -strict experimental -vf "setpts=0" udp://127.0.0.1:5600
+```
+
+
+https://blog.csdn.net/lida2003/article/details/129491517
+```
+​一、GStreamer 命令解析
+以下以 ​1280x720@30FPS 命令为例，逐段解析其功能：
 
 bash
-sudo netstat -tuln | grep 5602  # 确认无人机端 5602 端口处于监听状态
-​预期输出：
-bash
-udp   0   0 0.0.0.0:5602    0.0.0.0:*
-​验证 GStreamer 数据发送：
+gst-launch-1.0 v4l2src do-timestamp=true io-mode=mmap device=/dev/video0 \
+  extra-controls="controls,image_stabilization=1,h264_profile=4,h264_i_frame_period=60,h264_level=11,power_line_frequency=1,exposure_metering_mong=1,exposure_dynamic_framerate=0,scene_mode=0,video_bitrate_mode=1,video_bitrate=2000000,repeat_sequence_header=1" \
+  ! video/x-h264,profile=high,width=1280,height=720,framerate=30/1,stream-format=byte-stream \
+  ! h264parse disable-passthrough=true \
+  ! rtph264pay config-interval=1 pt=96 mtu=1400 aggregate-mode=zero-latency \
+  ! udpsink host=127.0.0.1 port=5602 sync=false
+​1. 摄像头采集模块
+​组件: v4l2src
+​关键参数:
+do-timestamp=true: 为视频帧添加时间戳，用于同步。
+io-mode=mmap: 使用内存映射方式读取摄像头数据（高性能）。
+device=/dev/video0: 指定摄像头设备路径。
+extra-controls: 摄像头硬件参数控制（见下表）。
+参数名	作用
+image_stabilization=1	启用图像稳定功能
+h264_profile=4	设置H.264编码为High Profile（高画质）
+h264_i_frame_period=60	关键帧间隔60帧（每2秒一个关键帧）
+video_bitrate=2000000	码率2Mbps（平衡画质与带宽）
+repeat_sequence_header=1	重复发送H.264序列头（提升抗丢包能力）
 
-bash
-# 在无人机端抓包验证
-sudo tcpdump -i lo -n udp port 5602  # 应显示持续 UDP 数据包
-​2. 防火墙或网络问题
-​开放 UDP 5602 端口：
+​2. 编码与封装模块
+​**video/x-h264**: 指定输出格式为H.264，设置分辨率、帧率、字节流格式。
+​**h264parse disable-passthrough=true**: 强制生成完整的NAL单元（避免分片错误）。
+​**rtph264pay**: 将H.264数据封装为RTP包，关键参数：
+aggregate-mode=zero-latency: 零延迟模式（禁用RTP包聚合）。
+mtu=1400: 适配WiFi MTU，避免分片丢包。
 
-bash
-sudo ufw allow 5602/udp  # 若使用 ufw 防火墙
+​3. 数据传输模块
+​**udpsink**: 通过UDP协议发送数据到本地5602端口。
+sync=false: 禁用时钟同步，减少延迟。
+host=127.0.0.1: 仅限本地测试，实际需改为接收端IP。
 
-# 发送测试视频图案（排除摄像头硬件问题）
-gst-launch-1.0 videotestsrc ! videoconvert ! x264enc ! rtph264pay ! udpsink host=127.0.0.1 port=5602
+​二、整合 WiFiBroadcast 的完整流程
+
+​1. 发送端（摄像头端）​
+bash
+# 通过GStreamer生成H.264流，直接通过管道发送给WiFiBroadcast
+gst-launch-1.0 v4l2src device=/dev/video0 \
+  ! video/x-h264,width=1280,height=720,framerate=30/1 \
+  ! h264parse \
+  ! fdsink fd=1 | sudo wfb_tx -u 5602 -k 1 -n 12 wlan0
+关键修改：
+
+移除RTP封装（WiFiBroadcast自带有序传输，无需RTP）。
+fdsink fd=1: 将H.264原始流输出到标准输出。
+wfb_tx -u 5600: 使用5600端口发送（需与接收端一致）。
+
+​2. 接收端（地面站）​
+bash
+# 接收数据并通过GStreamer低延迟播放
+sudo wfb_rx -u 5602 wlan0 | \
+gst-launch-1.0 fdsrc fd=0 \
+  ! h264parse \
+  ! avdec_h264 \
+  ! videoconvert \
+  ! autovideosink sync=false
+参数优化：
+
+sync=false: 禁用播放器同步，减少延迟。
+avdec_h264: 使用FFmpeg解码器（兼容性更佳）。
+
+​三、不同分辨率/帧率配置模板
+​1. 1280x720@60FPS（高帧率模式）​
+bash
+gst-launch-1.0 v4l2src device=/dev/video0 \
+  extra-controls="video_bitrate=4000000" \
+  ! video/x-h264,width=1280,height=720,framerate=60/1 \
+  ! h264parse \
+  ! fdsink fd=1 | sudo wfb_tx -u 5600 -k 2 -n 24 wlan0
+调整点：
+
+video_bitrate=4000000: 提高码率至4Mbps（适应高帧率）。
+wfb_tx -k 2: 增加FEC冗余包数量（抗高帧率丢包）。
+​2. 640x480@60FPS（低延迟模式）​
+bash
+gst-launch-1.0 v4l2src device=/dev/video0 \
+  extra-controls="h264_i_frame_period=30" \
+  ! video/x-h264,width=640,height=480,framerate=60/1 \
+  ! h264parse \
+  ! fdsink fd=1 | sudo wfb_tx -u 5600 -k 1 -n 18 wlan0
+调整点：
+
+h264_i_frame_period=30: 关键帧间隔减半（提升抗丢包能力）。
+-n 18: 降低发送速率（适配低分辨率）。
+
+​四、延迟优化策略
+
+​1. 你的测试数据（128ms）分析
+​来源：GStreamer本地UDP传输延迟（未含WiFiBroadcast）。
+​优化方向：
+​编码阶段：启用硬件编码（如Jetson Nano的NVENC）。
+​传输阶段：使用5GHz频段 + MIMO天线（减少无线干扰）。
+​协议优化：禁用RTP封装（节省10-20ms）。
+​2. 预期优化后延迟
+优化措施	预期延迟
+硬件编码 + 5GHz频段	80-120ms
+WiFiBroadcast + 零冗余	+30ms
+总延迟（端到端）	110-150ms
+​五、操作脚本
+​1. 动态配置脚本（send_video.sh）​
+bash
+#!/bin/bash
+RES="1280x720"    # 可改为 640x480、800x600 等
+FPS="60"          # 可改为 30、45、60
+BITRATE="4000000" # 根据分辨率调整
+
+gst-launch-1.0 v4l2src device=/dev/video0 \
+  extra-controls="video_bitrate=$BITRATE,h264_i_frame_period=$((FPS*2))" \
+  ! video/x-h264,width=$(echo $RES | cut -d'x' -f1),height=$(echo $RES | cut -d'x' -f2),framerate=$FPS/1 \
+  ! h264parse \
+  ! fdsink fd=1 | sudo wfb_tx -u 5600 -k 1 -n $((FPS*2)) wlan0
+​六、常见问题处理
+​1. 视频花屏/卡顿
+​原因: 高帧率导致WiFi带宽不足。
+​解决:
+bash
+# 降低分辨率或码率
+RES="640x480" BITRATE="1000000" ./send_video.sh
+​2. 无法启动硬件编码
+​检查:
+bash
+v4l2-ctl --device=/dev/video0 --list-formats-ext
+# 确认支持H.264输出
+​备用方案: 使用软件编码（移除extra-controls中的H.264参数）。
+​七、总结
+通过将GStreamer的高效编码与WiFiBroadcast的可靠传输结合，可实现 ​1280x720@60FPS 端到端延迟约150ms 的实时视频传输。实际部署时需根据硬件性能（如CPU负载）动态调整参数，并通过 wfb_rx -d 查看实时丢包率优化FEC冗余。
+
+```
+
+运行以下命令查看摄像头支持的视频格式和分辨率：
+
+```bash
+v4l2-ctl --device=/dev/video0 --list-formats-ext
+```
+
+
+根据你的摄像头参数（支持 ​MJPG 1280x720@30FPS 和 ​YUYV 640x480@30FPS），以下是优化后的 ​低延迟视频传输方案，分为 ​MJPG硬编码 和 ​YUYV软编码 两种模式：
+
+​方案一：MJPG硬编码（推荐）​
+​1. 发送端（摄像头端）​
+bash
+gst-launch-1.0 v4l2src device=/dev/video0 \
+  ! image/jpeg,width=1280,height=720,framerate=30/1 \
+  ! jpegdec \
+  ! x264enc tune=zerolatency speed-preset=ultrafast bitrate=2000 key-int-max=30 \
+  ! h264parse \
+  ! rtph264pay config-interval=1 pt=96 mtu=1400 \
+  ! udpsink host=127.0.0.1 port=5602 sync=false
+​2. 接收端（地面站）​
+bash
+gst-launch-1.0 udpsrc port=5602 \
+  ! application/x-rtp,media=video,encoding-name=H264 \
+  ! rtph264depay \
+  ! h264parse \
+  ! avdec_h264 \
+  ! videoconvert \
+  ! autovideosink sync=false
+
+
 
