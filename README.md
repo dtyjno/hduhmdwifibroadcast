@@ -609,7 +609,8 @@ v4l2-ctl --device=/dev/video0 --list-formats-ext
 
 ​方案一：MJPG硬编码（推荐）​
 ​1. 发送端（摄像头端）​
-bash
+```bash
+
 gst-launch-1.0 v4l2src device=/dev/video0 \
   ! image/jpeg,width=1280,height=720,framerate=30/1 \
   ! jpegdec \
@@ -617,8 +618,13 @@ gst-launch-1.0 v4l2src device=/dev/video0 \
   ! h264parse \
   ! rtph264pay config-interval=1 pt=96 mtu=1400 \
   ! udpsink host=127.0.0.1 port=5602 sync=false
-​2. 接收端（地面站）​
-bash
+
+```
+​
+
+2. 接收端（地面站）​
+
+```bash
 gst-launch-1.0 udpsrc port=5602 \
   ! application/x-rtp,media=video,encoding-name=H264 \
   ! rtph264depay \
@@ -626,6 +632,6 @@ gst-launch-1.0 udpsrc port=5602 \
   ! avdec_h264 \
   ! videoconvert \
   ! autovideosink sync=false
-
+```
 
 
